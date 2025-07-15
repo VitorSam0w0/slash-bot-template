@@ -16,20 +16,19 @@ module.exports = {
     },
 
     async execute(interaction, client) {
+        await interaction.deferReply();
+
         const url = interaction.options.getString('url');
 
-        // verifica se o usuário está em um canal de voz
         const voiceChannel = interaction.member.voice.channel;
         if (!voiceChannel) {
-            return interaction.reply({ content: 'Você precisa estar em um canal de voz!', ephemeral: true });
+            return interaction.editReply({ content: 'Você precisa estar em um canal de voz!', ephemeral: true });
         }
 
-        // verifica se o link é válido
         if (!ytdl.validateURL(url)) {
-            return interaction.reply({ content: 'Esse não parece um link válido do YouTube.', ephemeral: true });
+            return interaction.editReply({ content: 'Esse não parece um link válido do YouTube.', ephemeral: true });
         }
 
-        // conecta no canal de voz
         const connection = joinVoiceChannel({
             channelId: voiceChannel.id,
             guildId: interaction.guild.id,
@@ -43,7 +42,7 @@ module.exports = {
         player.play(resource);
         connection.subscribe(player);
 
-        await interaction.reply(`🎵 Tocando agora: ${url}`);
+        await interaction.editReply(`🎵 Tocando agora: ${url}`);
 
         player.on(AudioPlayerStatus.Idle, () => {
             connection.destroy();
