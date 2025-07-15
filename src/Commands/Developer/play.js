@@ -1,5 +1,5 @@
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } = require('@discordjs/voice');
-const ytdl = require('ytdl-core');
+const playdl = require('play-dl');
 
 module.exports = {
   data: {
@@ -26,7 +26,8 @@ module.exports = {
         return interaction.editReply({ content: 'Você precisa estar em um canal de voz!', ephemeral: true });
       }
 
-      if (!ytdl.validateURL(url)) {
+      const isValid = await playdl.validate(url);
+      if (!isValid) {
         return interaction.editReply({ content: 'Esse não parece um link válido do YouTube.', ephemeral: true });
       }
 
@@ -36,18 +37,17 @@ module.exports = {
         adapterCreator: interaction.guild.voiceAdapterCreator,
       });
 
-      // Aguarda conexão estar pronta
       await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
       console.log('🎧 Conectado ao canal de voz!');
 
-      const stream = ytdl(url, {
-        filter: 'audioonly',
-        quality: 'highestaudio',
-        highWaterMark: 1 << 25
-      });
+      const stream = await playdl.stream(url);
+      console.log('🎶 Stream do YouTube iniciado');
 
-      const resource = createAudioResource(stream, { inlineVolume: true });
-      resource.volume.setVolume(1.0); // 100% volume
+      const resource = createAudioResource(stream.stream, {
+        inputType: stream.type,
+        inlineVolume: true
+      });
+      resource.volume.setVolume(1.0); // volume máximo
 
       const player = createAudioPlayer();
 
