@@ -27,12 +27,7 @@ module.exports = {
         return interaction.editReply({ content: 'Você precisa estar em um canal de voz!', ephemeral: true });
       }
 
-      const isValid = await playdl.validate(url);
-      console.log(`Tipo de link detectado: ${isValid}`);
-      if (isValid !== 'yt_video') {
-        return interaction.editReply({ content: 'Esse não é um link válido de vídeo do YouTube.', ephemeral: true });
-      }
-
+      // Conecta no canal de voz
       const connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: interaction.guild.id,
@@ -42,6 +37,7 @@ module.exports = {
       await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
       console.log('🎧 Conectado ao canal de voz!');
 
+      // Cria o stream direto sem validação
       const stream = await playdl.stream(url);
       console.log('🎶 Stream do YouTube iniciado');
 
