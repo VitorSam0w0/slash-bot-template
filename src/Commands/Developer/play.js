@@ -1,5 +1,6 @@
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } = require('@discordjs/voice');
 const playdl = require('play-dl');
+const ytdl = require('ytdl-core');
 
 module.exports = {
   data: {
@@ -9,7 +10,7 @@ module.exports = {
       {
         name: 'url',
         description: 'Link do YouTube para tocar',
-        type: 3, // String
+        type: 3,
         required: true
       }
     ]
@@ -20,14 +21,11 @@ module.exports = {
 
     try {
       const url = interaction.options.getString('url');
-      console.log(`URL recebido: ${url}`);
-
       const voiceChannel = interaction.member.voice.channel;
       if (!voiceChannel) {
         return interaction.editReply({ content: 'Você precisa estar em um canal de voz!', ephemeral: true });
       }
 
-      // Conecta no canal de voz
       const connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: interaction.guild.id,
@@ -37,15 +35,21 @@ module.exports = {
       await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
       console.log('🎧 Conectado ao canal de voz!');
 
-      // Cria o stream direto sem validação
-      const stream = await playdl.stream(url);
-      console.log('🎶 Stream do YouTube iniciado');
+      let resource;
+      try {
+        // Tenta tocar com play-dl
+        const stream = await playdl.stream(url);
+        console.log('🎶 Stream com play-dl iniciado');
+        resource = createAudioResource(stream.stream, { inputType: stream.type, inlineVolume: true });
+      } catch (err) {
+        console.warn('⚠️ Falha com play-dl, tentando ytdl-core...');
+        // fallback para ytdl-core
+        if (!ytdl.validateURL(url)) throw new Error('URL inválido para ytdl-core também');
+        const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
+        resource = createAudioResource(stream, { inlineVolume: true });
+      }
 
-      const resource = createAudioResource(stream.stream, {
-        inputType: stream.type,
-        inlineVolume: true
-      });
-      resource.volume.setVolume(1.0); // volume máximo
+      resource.volume.setVolume(1.0);
 
       const player = createAudioPlayer();
 
