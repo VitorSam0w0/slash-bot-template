@@ -15,13 +15,18 @@ module.exports = {
     ]
   },
 
-  async execute(interaction, client) {
+  async execute(interaction) {
     await interaction.deferReply();
 
     try {
       const url = interaction.options.getString('url');
-      const voiceChannel = interaction.member.voice.channel;
+      console.log('URL recebida:', url);
 
+      if (!url) {
+        return interaction.editReply({ content: 'Você precisa enviar um link válido!', ephemeral: true });
+      }
+
+      const voiceChannel = interaction.member.voice.channel;
       if (!voiceChannel) {
         return interaction.editReply({ content: 'Você precisa estar em um canal de voz!', ephemeral: true });
       }
@@ -35,7 +40,6 @@ module.exports = {
       await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
       console.log('🎧 Conectado ao canal de voz!');
 
-      // Usar só play-dl
       const stream = await playdl.stream(url);
       const resource = createAudioResource(stream.stream, { inputType: stream.type, inlineVolume: true });
       resource.volume.setVolume(1);
