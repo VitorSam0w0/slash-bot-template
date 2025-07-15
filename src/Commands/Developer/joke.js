@@ -1,5 +1,5 @@
 const { REST } = require('discord.js');
-const fetch = require('node-fetch');
+const fetch = (...args) => import('node-fetch').then(mod => mod.default(...args));
 
 module.exports = {
   data: {
