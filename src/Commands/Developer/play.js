@@ -20,6 +20,7 @@ module.exports = {
 
     try {
       const url = interaction.options.getString('url');
+      console.log(`URL recebido: ${url}`);
 
       const voiceChannel = interaction.member.voice.channel;
       if (!voiceChannel) {
@@ -27,8 +28,9 @@ module.exports = {
       }
 
       const isValid = await playdl.validate(url);
-      if (!isValid) {
-        return interaction.editReply({ content: 'Esse não parece um link válido do YouTube.', ephemeral: true });
+      console.log(`Tipo de link detectado: ${isValid}`);
+      if (isValid !== 'yt_video') {
+        return interaction.editReply({ content: 'Esse não é um link válido de vídeo do YouTube.', ephemeral: true });
       }
 
       const connection = joinVoiceChannel({
