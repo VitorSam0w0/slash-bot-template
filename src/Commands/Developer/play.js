@@ -22,6 +22,9 @@ module.exports = {
     try {
       const url = interaction.options.getString('url');
       const voiceChannel = interaction.member.voice.channel;
+
+      console.log(`Tentando conectar ao canal de voz: ${voiceChannel ? voiceChannel.name : 'Nenhum canal'}`);
+
       if (!voiceChannel) {
         return interaction.editReply({ content: 'Você precisa estar em um canal de voz!', ephemeral: true });
       }
@@ -37,19 +40,20 @@ module.exports = {
 
       let resource;
       try {
-        // Tenta tocar com play-dl
         const stream = await playdl.stream(url);
         console.log('🎶 Stream com play-dl iniciado');
         resource = createAudioResource(stream.stream, { inputType: stream.type, inlineVolume: true });
       } catch (err) {
         console.warn('⚠️ Falha com play-dl, tentando ytdl-core...');
-        // fallback para ytdl-core
         if (!ytdl.validateURL(url)) throw new Error('URL inválido para ytdl-core também');
         const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
+        console.log('🎶 Stream com ytdl-core iniciado');
         resource = createAudioResource(stream, { inlineVolume: true });
       }
 
+      console.log('🎶 Stream criado, iniciando player...');
       resource.volume.setVolume(1.0);
+      console.log('Volume configurado para:', resource.volume.volume);
 
       const player = createAudioPlayer();
 
