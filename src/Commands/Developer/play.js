@@ -1,4 +1,4 @@
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } = require('@discordjs/voice');
 const ytdl = require('ytdl-core');
 
 module.exports = {
@@ -36,26 +36,42 @@ module.exports = {
         adapterCreator: interaction.guild.voiceAdapterCreator,
       });
 
-      const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
-      const resource = createAudioResource(stream);
+      // Aguarda conexão estar pronta
+      await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
+      console.log('🎧 Conectado ao canal de voz!');
+
+      const stream = ytdl(url, {
+        filter: 'audioonly',
+        quality: 'highestaudio',
+        highWaterMark: 1 << 25
+      });
+
+      const resource = createAudioResource(stream, { inlineVolume: true });
+      resource.volume.setVolume(1.0); // 100% volume
+
       const player = createAudioPlayer();
 
-      player.play(resource);
-      connection.subscribe(player);
-
-      await interaction.editReply(`🎵 Tocando agora: ${url}`);
+      player.on('stateChange', (oldState, newState) => {
+        console.log(`🎵 Player mudou de ${oldState.status} para ${newState.status}`);
+      });
 
       player.on(AudioPlayerStatus.Idle, () => {
+        console.log('🔇 Playback finalizado, desconectando...');
         connection.destroy();
       });
 
       player.on('error', error => {
-        console.error('Erro no player:', error);
+        console.error('❌ Erro no player:', error);
         connection.destroy();
       });
 
+      player.play(resource);
+      connection.subscribe(player);
+
+      await interaction.editReply(`🎶 Tocando agora: ${url}`);
+
     } catch (error) {
-      console.error('Erro no comando play:', error);
+      console.error('❌ Erro no comando play:', error);
       await interaction.editReply({ content: `Ocorreu um erro: ${error.message}`, ephemeral: true });
     }
   }
