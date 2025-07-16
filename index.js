@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const { Client, Collection, GatewayIntentBits } = require('discord.js');
 
 class BotClient extends Client {
   constructor() {
@@ -7,10 +7,17 @@ class BotClient extends Client {
   }
 
   async start(config) {
-    // carrega comandos, eventos etc
+    // Aqui você pode carregar comandos e eventos
+    console.log('Iniciando carregamento dos comandos...');
 
-    await this.login(config.TOKEN);  // Aqui entra o token correto!
-    console.log('Bot online!');
+    // Exemplo: carregar comandos (você pode adaptar para sua estrutura)
+    // await this.loadCommands();
+
+    this.once('ready', () => {
+      console.log(`Bot online! Usuário: ${this.user.tag}`);
+    });
+
+    await this.login(config.TOKEN);
   }
 }
 
