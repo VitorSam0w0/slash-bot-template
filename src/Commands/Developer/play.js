@@ -1,5 +1,6 @@
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } = require('@discordjs/voice');
 const playdl = require('play-dl');
+const ytdl = require('ytdl-core');
 
 module.exports = {
   data: {
@@ -15,17 +16,11 @@ module.exports = {
     ]
   },
 
-  async execute(interaction) {
+  async execute(interaction, client) {
     await interaction.deferReply();
 
     try {
       const url = interaction.options.getString('url');
-      console.log('URL recebida:', url);
-
-      if (!url) {
-        return interaction.editReply({ content: 'Você precisa enviar um link válido!', ephemeral: true });
-      }
-
       const voiceChannel = interaction.member.voice.channel;
       if (!voiceChannel) {
         return interaction.editReply({ content: 'Você precisa estar em um canal de voz!', ephemeral: true });
@@ -40,9 +35,21 @@ module.exports = {
       await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
       console.log('🎧 Conectado ao canal de voz!');
 
-      const stream = await playdl.stream(url);
-      const resource = createAudioResource(stream.stream, { inputType: stream.type, inlineVolume: true });
-      resource.volume.setVolume(1);
+      let resource;
+      try {
+        // Tenta tocar com play-dl
+        const stream = await playdl.stream(url);
+        console.log('🎶 Stream com play-dl iniciado');
+        resource = createAudioResource(stream.stream, { inputType: stream.type, inlineVolume: true });
+      } catch (err) {
+        console.warn('⚠️ Falha com play-dl, tentando ytdl-core...');
+        // fallback para ytdl-core
+        if (!ytdl.validateURL(url)) throw new Error('URL inválido para ytdl-core também');
+        const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
+        resource = createAudioResource(stream, { inlineVolume: true });
+      }
+
+      resource.volume.setVolume(1.0);
 
       const player = createAudioPlayer();
 
