@@ -1,80 +1,70 @@
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } = require('@discordjs/voice');
-const playdl = require('play-dl');
+// In your commands file (commands.js)
+
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType, VoiceConnectionStatus } = require('@discordjs/voice');
 const ytdl = require('ytdl-core');
 
-module.exports = {
-  data: {
-    name: "play",
-    description: "Toca música ou vídeo do YouTube no canal de voz",
-    options: [
-      {
-        name: 'url',
-        description: 'Link do YouTube para tocar',
-        type: 3,
-        required: true
-      }
-    ]
-  },
+module.exports.execute = async (client) => {
+    client.commands.set('play', {
+        name: 'play',
+        description: 'Plays music from a YouTube URL.',
+        async execute(message, args) {
+            if (!message.member.voice.channel) {
+                return message.reply('You need to be in a voice channel to play music!');
+            }
 
-  async execute(interaction, client) {
-    await interaction.deferReply();
+            const voiceChannel = message.member.voice.channel;
 
-    try {
-      const url = interaction.options.getString('url');
-      const voiceChannel = interaction.member.voice.channel;
-      if (!voiceChannel) {
-        return interaction.editReply({ content: 'Você precisa estar em um canal de voz!', ephemeral: true });
-      }
+            if (!args.length) {
+                return message.reply('Please provide a YouTube URL to play!');
+            }
 
-      const connection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: interaction.guild.id,
-        adapterCreator: interaction.guild.voiceAdapterCreator,
-      });
+            const url = args[0];
 
-      await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
-      console.log('🎧 Conectado ao canal de voz!');
+            if (!ytdl.validateURL(url)) {
+                return message.reply('Please provide a valid YouTube URL!');
+            }
 
-      let resource;
-      try {
-        // Tenta tocar com play-dl
-        const stream = await playdl.stream(url);
-        console.log('🎶 Stream com play-dl iniciado');
-        resource = createAudioResource(stream.stream, { inputType: stream.type, inlineVolume: true });
-      } catch (err) {
-        console.warn('⚠️ Falha com play-dl, tentando ytdl-core...');
-        // fallback para ytdl-core
-        if (!ytdl.validateURL(url)) throw new Error('URL inválido para ytdl-core também');
-        const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
-        resource = createAudioResource(stream, { inlineVolume: true });
-      }
+            try {
+                const connection = joinVoiceChannel({
+                    channelId: voiceChannel.id,
+                    guildId: message.guild.id,
+                    adapterCreator: message.guild.voiceAdapterCreator,
+                });
 
-      resource.volume.setVolume(1.0);
+                const stream = ytdl(url, { filter: 'audioonly' });
+                const resource = createAudioResource(stream, {
+                    inputType: StreamType.Arbitrary,
+                });
 
-      const player = createAudioPlayer();
+                const player = createAudioPlayer();
+                connection.subscribe(player);
+                player.play(resource);
 
-      player.on('stateChange', (oldState, newState) => {
-        console.log(`🎵 Player mudou de ${oldState.status} para ${newState.status}`);
-      });
+                await message.reply(`Now playing: ${url}`);
 
-      player.on(AudioPlayerStatus.Idle, () => {
-        console.log('🔇 Playback finalizado, desconectando...');
-        connection.destroy();
-      });
+                player.on('error', error => {
+                    console.error('Error playing audio:', error);
+                    connection.destroy();
+                    message.channel.send('An error occurred while playing the audio.');
+                });
 
-      player.on('error', error => {
-        console.error('❌ Erro no player:', error);
-        connection.destroy();
-      });
+                connection.on(VoiceConnectionStatus.Disconnected, async (oldState, newState) => {
+                    try {
+                        await Promise.race([
+                            entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
+                            entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
+                        ]);
+                        // Seems to be reconnecting to voice channel.
+                    } catch (error) {
+                        // Seems to be fully disconnected, clean up modules
+                        connection.destroy();
+                    }
+                });
 
-      player.play(resource);
-      connection.subscribe(player);
-
-      await interaction.editReply(`🎶 Tocando agora: ${url}`);
-
-    } catch (error) {
-      console.error('❌ Erro no comando play:', error);
-      await interaction.editReply({ content: `Ocorreu um erro: ${error.message}`, ephemeral: true });
-    }
-  }
+            } catch (error) {
+                console.error(error);
+                return message.reply('Failed to join the voice channel or play the audio.');
+            }
+        },
+    });
 };
