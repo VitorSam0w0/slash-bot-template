@@ -1,19 +1,28 @@
-// handlers/command.js
-const fs = require('fs');
-const path = require('path');
+const { readdirSync } = require("node:fs");
 
-module.exports.execute = async (client) => {
-    const commandsPath = path.join(__dirname, '../commands');
-    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+module.exports = {
+  async execute(client) {
+    const commands = client.commands;
+    const PATH = process.cwd() + "/src/Commands";
 
-    for (const file of commandFiles) {
-        const filePath = path.join(commandsPath, file);
-        const command = require(filePath);
-        if ('data' in command && 'execute' in command) {
-            client.commands.set(command.data.name, command);
-            console.log(`[COMMAND] Loaded command: ${command.data.name}`);
-        } else {
-            console.log(`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`);
+    const folders = readdirSync(PATH);
+    for (let dir of folders) {
+      const folder = readdirSync(`${PATH}/${dir}`);
+
+      for (let file of folder) {
+        const cmd = require(`${PATH}/${dir}/${file}`);
+
+        // Verifica se o comando tem data e name
+        if (!cmd?.data?.name) {
+          console.log(`⚠️  O comando em ${PATH}/${dir}/${file} está sem 'data.name', comando ignorado.`);
+          continue; // Pula esse comando
         }
+
+        commands.set(cmd.data.name, cmd);
+        console.log(`✅ Comando carregado: ${cmd.data.name}`);
+      }
     }
+
+    console.log("✅ Todos os comandos foram carregados com sucesso!");
+  },
 };

@@ -1,70 +1,42 @@
-// In your commands file (commands.js)
+// commands/play.js
+const { SlashCommandBuilder } = require('discord.js');
+const { useQueue } = require('discord-player');
 
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType, VoiceConnectionStatus } = require('@discordjs/voice');
-const ytdl = require('ytdl-core');
+module.exports = {
+    data: new SlashCommandBuilder()
+        .setName('play')
+        .setDescription('Plays a song from YouTube.')
+        .addStringOption(option =>
+            option.setName('query')
+                .setDescription('The YouTube URL or song name.')
+                .setRequired(true)),
+    async execute(interaction) {
+        const query = interaction.options.getString('query');
+        const queue = useQueue(interaction.guildId);
 
-module.exports.execute = async (client) => {
-    client.commands.set('play', {
-        name: 'play',
-        description: 'Plays music from a YouTube URL.',
-        async execute(message, args) {
-            if (!message.member.voice.channel) {
-                return message.reply('You need to be in a voice channel to play music!');
+        if (!interaction.member.voice.channel) {
+            return await interaction.reply({ content: 'You need to be in a voice channel!', ephemeral: true });
+        }
+
+        if (queue && queue.channelId !== interaction.member.voice.channelId) {
+            return await interaction.reply({ content: 'You are not in the same voice channel as the bot!', ephemeral: true });
+        }
+
+        try {
+            await interaction.deferReply();
+            const searchResult = await interaction.client.player.search(query, { requestedBy: interaction.user });
+
+            if (!searchResult.hasTracks()) {
+                return await interaction.editReply(`No tracks found for "${query}"`);
             }
 
-            const voiceChannel = message.member.voice.channel;
+            const { track } = await interaction.client.player.play(interaction.member.voice.channel, searchResult.tracks[0]);
 
-            if (!args.length) {
-                return message.reply('Please provide a YouTube URL to play!');
-            }
+            return await interaction.editReply(`Now playing: **${track.title}** by ${track.author}`);
 
-            const url = args[0];
-
-            if (!ytdl.validateURL(url)) {
-                return message.reply('Please provide a valid YouTube URL!');
-            }
-
-            try {
-                const connection = joinVoiceChannel({
-                    channelId: voiceChannel.id,
-                    guildId: message.guild.id,
-                    adapterCreator: message.guild.voiceAdapterCreator,
-                });
-
-                const stream = ytdl(url, { filter: 'audioonly' });
-                const resource = createAudioResource(stream, {
-                    inputType: StreamType.Arbitrary,
-                });
-
-                const player = createAudioPlayer();
-                connection.subscribe(player);
-                player.play(resource);
-
-                await message.reply(`Now playing: ${url}`);
-
-                player.on('error', error => {
-                    console.error('Error playing audio:', error);
-                    connection.destroy();
-                    message.channel.send('An error occurred while playing the audio.');
-                });
-
-                connection.on(VoiceConnectionStatus.Disconnected, async (oldState, newState) => {
-                    try {
-                        await Promise.race([
-                            entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
-                            entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
-                        ]);
-                        // Seems to be reconnecting to voice channel.
-                    } catch (error) {
-                        // Seems to be fully disconnected, clean up modules
-                        connection.destroy();
-                    }
-                });
-
-            } catch (error) {
-                console.error(error);
-                return message.reply('Failed to join the voice channel or play the audio.');
-            }
-        },
-    });
+        } catch (error) {
+            console.error(error);
+            await interaction.editReply('There was an error trying to play the music!');
+        }
+    },
 };
