@@ -1,88 +1,53 @@
-const { Routes, REST } = require("discord.js");
+async execute(interaction, client) {
+  const { TOKEN } = client.config;
+  const guild = interaction.guild;
+  const rest = new REST({ version: "10" });
+  rest.setToken(TOKEN);
 
-module.exports = {
-  data: {
-    name: "add",
-    description: "add a command",
-    default_member_permissions: "0",
-    dm_permissions: "0",
-    options: [
-      {
-        name: "name",
-        description: "put the name of the command to add",
-        type: 3,
-        required: true,
-      },
-      {
-        name: "type",
-        description: "choose the type of the command to add",
-        type: 3,
-        required: true,
-        choices: [
-          {
-            name: "guild",
-            value: "guild",
-          },
-          {
-            name: "global",
-            value: "global",
-          },
-        ],
-      },
-    ],
-  },
+  const name = interaction.options.getString("name").toUpperCase();
+  const type = interaction.options.getString("type").toUpperCase();
+  const command = client.commands.get(name.toLowerCase());
 
-  async execute(interaction, client) {
-    const { TOKEN } = client.config;
-    const guild = interaction.guild;
-    const rest = new REST({ version: "10" });
-    rest.setToken(TOKEN);
+  if (!command) {
+    return await interaction.reply({
+      embeds: [
+        {
+          title: `${name} ⊗ NOT FOUND in the FILE`,
+          color: 0xd8303b,
+        },
+      ],
+      ephemeral: true,
+    });
+  }
 
-    const name = interaction.options.getString("name").toUpperCase();
-    const type = interaction.options.getString("type").toUpperCase();
-    const command = client.commands.get(name.toLowerCase());
+  await interaction.deferReply({ ephemeral: true }); // avisa que tá processando
 
-    if (!command) {
-      return await interaction.reply({
-        embeds: [
-          {
-            title: `${name} ⊗ NOT FOUND in the FILE`,
-            color: 0xd8303b,
-          },
-        ],
-        ephemeral: true,
+  try {
+    if (type === "GLOBAL") {
+      await rest.post(Routes.applicationCommands(client.user.id), {
+        body: command.data.toJSON(),
       });
+    } else {
+      await rest.post(
+        Routes.applicationGuildCommands(client.user.id, guild.id),
+        {
+          body: command.data.toJSON(),
+        }
+      );
     }
 
-    try {
-      if (type === "GLOBAL") {
-        await rest.post(Routes.applicationCommands(client.user.id), {
-          body: command.data.toJSON(), // IMPORTANTE usar toJSON()
-        });
-      } else {
-        await rest.post(
-          Routes.applicationGuildCommands(client.user.id, guild.id),
-          {
-            body: command.data.toJSON(),
-          }
-        );
-      }
-
-      await interaction.reply({
-        embeds: [
-          {
-            title: `${name} ⊕ ADDED to ${type}`,
-            color: 0x00ffaa,
-          },
-        ],
-        ephemeral: true,
-      });
-    } catch (error) {
-      console.error("Erro ao adicionar comando:", error);
-      await interaction.reply({
-        content: "❌ Ocorreu um erro ao adicionar o comando.",
-        ephemeral: true,
-      });
-    }
-  },
-};
+    await interaction.editReply({
+      embeds: [
+        {
+          title: `${name} ⊕ ADDED to ${type}`,
+          color: 0x00ffaa,
+        },
+      ],
+    });
+  } catch (error) {
+    console.error("Erro ao adicionar comando:", error);
+    await interaction.editReply({
+      content: "❌ Ocorreu um erro ao adicionar o comando.",
+    });
+  }
+}
