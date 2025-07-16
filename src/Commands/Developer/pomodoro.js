@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const fetch = (...args) => import('node-fetch').then(mod => mod.default(...args));
 
 module.exports = {
   data: new SlashCommandBuilder()
