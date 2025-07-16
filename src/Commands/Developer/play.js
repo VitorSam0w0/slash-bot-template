@@ -22,39 +22,32 @@ module.exports = {
 
     const url = interaction.options.getString('url');
 
-    let connection; // Definir connection fora do try para acesso no bloco catch
+    let connection;
     try {
-      // Valida o URL
       if (!ytdl.validateURL(url)) {
         return interaction.editReply('Por favor, forneça um URL válido do YouTube!');
       }
 
-      // Cria a conexão com o canal de voz
       connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: interaction.guild.id,
         adapterCreator: interaction.guild.voiceAdapterCreator,
       });
 
-      // Cria o player de áudio
       const player = createAudioPlayer();
-
-      // Obtém o stream da música com opções mais robustas
       const stream = ytdl(url, {
         filter: 'audioonly',
         quality: 'highestaudio',
-        highWaterMark: 1 << 25, // Aumenta o buffer para evitar travamentos
-        dlChunkSize: 0, // Desativa chunking para melhor compatibilidade
+        highWaterMark: 1 << 25,
+        dlChunkSize: 0,
       });
 
       const resource = createAudioResource(stream);
       player.play(resource);
       connection.subscribe(player);
 
-      // Estado para rastrear se a conexão já foi destruída
       let isConnectionDestroyed = false;
 
-      // Evento para quando a música termina
       player.on(AudioPlayerStatus.Idle, () => {
         if (!isConnectionDestroyed) {
           connection.destroy();
@@ -62,7 +55,6 @@ module.exports = {
         }
       });
 
-      // Tratamento de erros do player
       player.on('error', error => {
         console.error('Erro no player:', error);
         interaction.editReply('Ocorreu um erro ao tentar tocar a música.');
@@ -76,7 +68,7 @@ module.exports = {
     } catch (error) {
       console.error('Erro ao executar o comando play:', error);
       await interaction.editReply('Ocorreu um erro ao processar o comando. Verifique o URL ou tente novamente mais tarde.');
-      if (connection && !connection.state.status === 'destroyed') {
+      if (connection && connection.state.status !== 'destroyed') {
         connection.destroy();
       }
     }
