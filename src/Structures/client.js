@@ -1,70 +1,70 @@
-const { Client, GatewayIntentBits, Collection } = require("discord.js");
-const fs = require("fs");
-const path = require("path");
+// In your commands file (commands.js)
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildVoiceStates,  // ESSENCIAL para comandos de voz
-  ],
-  presence: {
-    activities: [{ name: "inicializando o Paradoxo...", type: 0 }],
-    status: "dnd",
-  },
-});
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType, VoiceConnectionStatus } = require('@discordjs/voice');
+const ytdl = require('ytdl-core');
 
-client.commands = new Collection();
+module.exports.execute = async (client) => {
+    client.commands.set('play', {
+        name: 'play',
+        description: 'Plays music from a YouTube URL.',
+        async execute(message, args) {
+            if (!message.member.voice.channel) {
+                return message.reply('You need to be in a voice channel to play music!');
+            }
 
-module.exports.start = async (config) => {
-  client.config = config;
+            const voiceChannel = message.member.voice.channel;
 
-  console.log("loading commands...");
-  await require("./commands.js").execute(client);
-  console.log("loading handler...");
-  await require("./handler.js").execute(client);
-  console.log("loading events...");
-  await require("./events.js").execute(client);
+            if (!args.length) {
+                return message.reply('Please provide a YouTube URL to play!');
+            }
 
-  client.once("ready", () => {
-    console.log(`✅ Bot online como ${client.user.tag}`);
+            const url = args[0];
 
-    // Troca de presença a cada 1 minuto
-    const statusList = [
-      { name: "o fIM dEsse mUndo foDido", type: 0 },
-      { name: "você tentando entender", type: 3 },
-      { name: "o tempo se dobrar", type: 2 },
-      { name: "um paradoxo sem fim", type: 0 },
-      { name: "o caos acontecer", type: 3 },
-    ];
+            if (!ytdl.validateURL(url)) {
+                return message.reply('Please provide a valid YouTube URL!');
+            }
 
-    let i = 0;
-    setInterval(() => {
-      client.user.setPresence({
-        activities: [statusList[i]],
-        status: "dnd",
-      });
-      i = (i + 1) % statusList.length;
-    }, 60 * 1000);
+            try {
+                const connection = joinVoiceChannel({
+                    channelId: voiceChannel.id,
+                    guildId: message.guild.id,
+                    adapterCreator: message.guild.voiceAdapterCreator,
+                });
 
-    // Troca de avatar a cada 1 hora
-    const avatarFolder = path.join(__dirname, "..", "avatars");
-    const avatars = fs.readdirSync(avatarFolder).filter(file => file.endsWith(".png"));
+                const stream = ytdl(url, { filter: 'audioonly' });
+                const resource = createAudioResource(stream, {
+                    inputType: StreamType.Arbitrary,
+                });
 
-    if (avatars.length === 0) {
-      console.warn("⚠️ Nenhum avatar encontrado na pasta /avatars");
-    } else {
-      let a = 0;
-      setInterval(() => {
-        const avatarPath = path.join(avatarFolder, avatars[a]);
-        client.user.setAvatar(fs.readFileSync(avatarPath))
-          .then(() => console.log(`🖼️ Avatar alterado para ${avatars[a]}`))
-          .catch(console.error);
+                const player = createAudioPlayer();
+                connection.subscribe(player);
+                player.play(resource);
 
-        a = (a + 1) % avatars.length;
-      }, 60 * 60 * 1000);
-    }
-  });
+                await message.reply(`Now playing: ${url}`);
 
-  await client.login(config.TOKEN);
+                player.on('error', error => {
+                    console.error('Error playing audio:', error);
+                    connection.destroy();
+                    message.channel.send('An error occurred while playing the audio.');
+                });
+
+                connection.on(VoiceConnectionStatus.Disconnected, async (oldState, newState) => {
+                    try {
+                        await Promise.race([
+                            entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
+                            entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
+                        ]);
+                        // Seems to be reconnecting to voice channel.
+                    } catch (error) {
+                        // Seems to be fully disconnected, clean up modules
+                        connection.destroy();
+                    }
+                });
+
+            } catch (error) {
+                console.error(error);
+                return message.reply('Failed to join the voice channel or play the audio.');
+            }
+        },
+    });
 };
