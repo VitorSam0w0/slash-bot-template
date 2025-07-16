@@ -13,26 +13,24 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    // Defer a resposta para evitar timeout em operações demoradas
     await interaction.deferReply();
 
-    // Obtém o canal de voz do usuário
     const voiceChannel = interaction.member.voice.channel;
     if (!voiceChannel) {
       return interaction.editReply('Você precisa estar em um canal de voz para usar este comando!');
     }
 
-    // Obtém o URL fornecido pelo usuário
     const url = interaction.options.getString('url');
 
+    let connection; // Definir connection fora do try para acesso no bloco catch
     try {
-      // Verifica se o URL é válido
+      // Valida o URL
       if (!ytdl.validateURL(url)) {
         return interaction.editReply('Por favor, forneça um URL válido do YouTube!');
       }
 
       // Cria a conexão com o canal de voz
-      const connection = joinVoiceChannel({
+      connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: interaction.guild.id,
         adapterCreator: interaction.guild.voiceAdapterCreator,
@@ -41,31 +39,46 @@ module.exports = {
       // Cria o player de áudio
       const player = createAudioPlayer();
 
-      // Obtém o stream da música
-      const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio' });
-      const resource = createAudioResource(stream);
+      // Obtém o stream da música com opções mais robustas
+      const stream = ytdl(url, {
+        filter: 'audioonly',
+        quality: 'highestaudio',
+        highWaterMark: 1 << 25, // Aumenta o buffer para evitar travamentos
+        dlChunkSize: 0, // Desativa chunking para melhor compatibilidade
+      });
 
-      // Toca a música
+      const resource = createAudioResource(stream);
       player.play(resource);
       connection.subscribe(player);
 
+      // Estado para rastrear se a conexão já foi destruída
+      let isConnectionDestroyed = false;
+
       // Evento para quando a música termina
       player.on(AudioPlayerStatus.Idle, () => {
-        connection.destroy(); // Desconecta o bot após a música terminar
+        if (!isConnectionDestroyed) {
+          connection.destroy();
+          isConnectionDestroyed = true;
+        }
       });
 
       // Tratamento de erros do player
       player.on('error', error => {
         console.error('Erro no player:', error);
         interaction.editReply('Ocorreu um erro ao tentar tocar a música.');
-        connection.destroy();
+        if (!isConnectionDestroyed) {
+          connection.destroy();
+          isConnectionDestroyed = true;
+        }
       });
 
-      // Responde ao usuário
       await interaction.editReply(`Tocando música do link: ${url}`);
     } catch (error) {
       console.error('Erro ao executar o comando play:', error);
-      await interaction.editReply('Ocorreu um erro ao processar o comando.');
+      await interaction.editReply('Ocorreu um erro ao processar o comando. Verifique o URL ou tente novamente mais tarde.');
+      if (connection && !connection.state.status === 'destroyed') {
+        connection.destroy();
+      }
     }
   },
 };
